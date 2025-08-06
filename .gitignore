@@ -32,7 +32,8 @@ go.work.sum
 # .vscode/
 
 # Binary output
-log-analyzer
+/log-analyzer
+/influxql-analyzer
 
 # Configuration files
 filtering_rules.local.yaml
