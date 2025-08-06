@@ -30,3 +30,12 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Binary output
+log-analyzer
+
+# Configuration files
+filtering_rules.local.yaml
+
+*.log
+*.json
