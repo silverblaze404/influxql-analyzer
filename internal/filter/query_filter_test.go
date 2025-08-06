@@ -856,3 +856,64 @@ func TestQueryFilter_OffsetLimit(t *testing.T) {
 		})
 	}
 }
+
+func TestQueryFilter_TimezoneQueries(t *testing.T) {
+	rules := config.FilteringRules{
+		RequireTimeFilter: true,
+		MaxTimeRangeHours: 720, // 30 days
+	}
+	filter := NewQueryFilter(rules)
+
+	tests := []struct {
+		name     string
+		query    string
+		expected bool
+		reason   string
+	}{
+		{
+			name:     "Query with timezone function should parse correctly",
+			query:    "select sum(value) as total_item_put from item_put where time >= '2025-07-22T04:00:00.000Z' AND (fulfilment_area='' or fulfilment_area='gtp') AND installation_id='butler_demo' group by time(24h) fill(0) tz('America/New_York')",
+			expected: true,
+		},
+		{
+			name:     "Query with UTC timezone",
+			query:    "select sum(value) from item_put where time >= '2025-07-22T04:00:00.000Z' group by time(1h) tz('UTC')",
+			expected: true,
+		},
+		{
+			name:     "Query with European timezone",
+			query:    "select mean(value) from cpu where time >= now() - 1d group by time(1h) tz('Europe/London')",
+			expected: true,
+		},
+		{
+			name:     "Query with Pacific timezone",
+			query:    "select last(value) from temperature where time >= now() - 12h group by time(30m) tz('Pacific/Auckland')",
+			expected: true,
+		},
+		{
+			name:     "Query with Asia timezone",
+			query:    "select count(value) from events where time >= now() - 6h group by time(1h) tz('Asia/Tokyo')",
+			expected: true,
+		},
+		{
+			name:     "Query with invalid timezone should fail during parsing",
+			query:    "select sum(value) from item_put where time >= '2025-07-22T04:00:00.000Z' group by time(1h) tz('Invalid/Timezone')",
+			expected: false,
+			reason:   "Invalid query syntax",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := filter.ValidateQuery(tt.query)
+			if result.Allowed != tt.expected {
+				t.Errorf("ValidateQuery() = %v, expected %v. Reason: %s", result.Allowed, tt.expected, result.Reason)
+			}
+			if !tt.expected && tt.reason != "" {
+				if !strings.Contains(result.Reason, tt.reason) {
+					t.Errorf("Expected reason to contain '%s', got '%s'", tt.reason, result.Reason)
+				}
+			}
+		})
+	}
+}

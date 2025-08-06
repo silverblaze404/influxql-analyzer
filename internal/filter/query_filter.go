@@ -3,7 +3,6 @@ package filter
 import (
 	"fmt"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -500,56 +499,20 @@ func (qf *QueryFilter) parseDuration(expr influxql.Expr) time.Duration {
 	case *influxql.DurationLiteral:
 		return e.Val
 	case *influxql.StringLiteral:
-		// Parse string duration
+		// Use InfluxQL's official ParseDuration function which supports all InfluxDB duration formats
+		if d, err := influxql.ParseDuration(e.Val); err == nil {
+			return d
+		}
+		// Fallback to Go's standard parser for compatibility
 		if d, err := time.ParseDuration(e.Val); err == nil {
 			return d
 		}
-		// Handle InfluxDB specific durations like "30d" which Go doesn't support
-		return qf.parseInfluxDuration(e.Val)
+		return 0
 	case *influxql.IntegerLiteral:
 		// Assume it's nanoseconds if just a number
 		return time.Duration(e.Val)
 	}
 	return 0
-}
-
-// parseInfluxDuration parses InfluxDB-specific duration formats
-func (qf *QueryFilter) parseInfluxDuration(durationStr string) time.Duration {
-	if len(durationStr) < 2 {
-		return 0
-	}
-
-	// Extract number and unit
-	var num int64
-	var unit string
-	for i := len(durationStr) - 1; i >= 0; i-- {
-		if durationStr[i] >= '0' && durationStr[i] <= '9' {
-			num, _ = strconv.ParseInt(durationStr[:i+1], 10, 64)
-			unit = durationStr[i+1:]
-			break
-		}
-	}
-
-	switch unit {
-	case "ns":
-		return time.Duration(num) * time.Nanosecond
-	case "us", "µs":
-		return time.Duration(num) * time.Microsecond
-	case "ms":
-		return time.Duration(num) * time.Millisecond
-	case "s":
-		return time.Duration(num) * time.Second
-	case "m":
-		return time.Duration(num) * time.Minute
-	case "h":
-		return time.Duration(num) * time.Hour
-	case "d":
-		return time.Duration(num) * 24 * time.Hour
-	case "w":
-		return time.Duration(num) * 7 * 24 * time.Hour
-	default:
-		return 0
-	}
 }
 
 func (qf *QueryFilter) isExpensiveQuery(stmt *influxql.SelectStatement) bool {
@@ -652,9 +615,18 @@ func (qf *QueryFilter) extractMeasurementsFromSources(sources influxql.Sources, 
 	}
 }
 
-// parseTimeString tries to parse a time string using various common formats
+// parseTimeString tries to parse a time string using InfluxQL's time parsing logic
 func (qf *QueryFilter) parseTimeString(timeStr string) (time.Time, error) {
-	// List of time formats to try, ordered from most specific to least specific
+	// First, try to use InfluxQL's StringLiteral parsing which handles many formats
+	strLit := &influxql.StringLiteral{Val: timeStr}
+	if strLit.IsTimeLiteral() {
+		timeLit, err := strLit.ToTimeLiteral(time.UTC) // Use UTC as default location
+		if err == nil {
+			return timeLit.Val, nil
+		}
+	}
+
+	// Fallback to manual parsing for additional formats
 	timeFormats := []string{
 		time.RFC3339,                  // 2006-01-02T15:04:05Z07:00
 		time.RFC3339Nano,              // 2006-01-02T15:04:05.999999999Z07:00
@@ -667,6 +639,7 @@ func (qf *QueryFilter) parseTimeString(timeStr string) (time.Time, error) {
 		"2006-01-02T15:04:05",         // 2006-01-02T15:04:05
 		"2006-01-02T15:04:05.000",     // 2006-01-02T15:04:05.000
 		"2006-01-02T15:04:05.000000",  // 2006-01-02T15:04:05.000000
+		"2006-01-02",                  // Date only format
 	}
 
 	var lastErr error
