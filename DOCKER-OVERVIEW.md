@@ -89,7 +89,11 @@ The tool uses a YAML configuration file to define filtering rules:
 - **Security rules**: Block dangerous functions/statements
 - **Measurement filtering**: Restrict allowed measurements
 
-Default configuration is included, or mount your custom `filtering_rules.yaml`.
+**Default configuration** is included in the image at `/app/filtering_rules.yaml`. To view the default settings:
+
+```bash
+docker run --rm ranjan97/influxql-analyzer cat /app/filtering_rules.yaml
+```
 
 ## 📊 Output Format
 

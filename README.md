@@ -192,7 +192,15 @@ The application uses a YAML configuration file (`filtering_rules.yaml`) to defin
 - Allowed measurements
 - Performance filtering options
 
-See `filtering_rules.yaml` for the complete configuration options and examples.
+### Default Configuration
+
+The default configuration file is included in the repository as `filtering_rules.yaml`.
+
+**For Docker users**, you can view the default configuration:
+
+```bash
+docker run --rm ranjan97/influxql-analyzer cat /app/filtering_rules.yaml
+```
 
 ## Output
 
