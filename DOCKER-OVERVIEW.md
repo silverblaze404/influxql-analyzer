@@ -25,12 +25,15 @@ docker run --rm \
 
 ## 📋 What It Detects
 
-- ⏰ **Excessive time ranges**: Queries spanning longer than configured limits
+- ⏰ **Time range violations**: Queries exceeding configured time limits or missing time filters
+- 🔍 **Regex usage**: Queries using regex operators (=~ or !~) with optional blocking
 - 📊 **High OFFSET values**: Pagination queries with large OFFSET parameters
 - 🚫 **Blocked functions and statements**: DELETE, DROP, or other restricted operations
 - 🔍 **Wildcard SELECT without LIMIT**: SELECT * queries without proper limits
-- ⚡ **Expensive SHOW commands**: SHOW SERIES without appropriate constraints
 - 📈 **Unlimited GROUP BY queries**: Aggregations without time bucketing or limits
+- ⚡ **Expensive SHOW commands**: SHOW SERIES without appropriate constraints
+- 🎯 **Measurement restrictions**: Queries on unauthorized measurements (if enabled)
+- ⏱️ **Long-running queries**: Queries exceeding duration warning thresholds
 
 ## 🛠️ Usage Examples
 
@@ -84,8 +87,9 @@ docker run --rm \
 
 The tool uses a YAML configuration file to define filtering rules:
 
-- **Time filtering**: Require time filters, max time ranges
-- **Performance limits**: Query duration warnings, LIMIT requirements  
+- **Time filtering**: Require time filters, max time ranges, query duration warnings
+- **Regex usage control**: Warn on or block regex operators (=~ or !~)
+- **Performance limits**: Query duration warnings, LIMIT requirements, OFFSET limits
 - **Security rules**: Block dangerous functions/statements
 - **Measurement filtering**: Restrict allowed measurements
 

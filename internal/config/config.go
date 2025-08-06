@@ -12,6 +12,8 @@ type FilteringRules struct {
 	RequireTimeFilter      bool     `yaml:"require_time_filter"`
 	MaxTimeRangeHours      int      `yaml:"max_time_range_hours"`
 	WarnQueryDurationHours int      `yaml:"warn_query_duration_hours"`
+	WarnOnRegexUsage       bool     `yaml:"warn_on_regex_usage"`
+	BlockRegexUsage        bool     `yaml:"block_regex_usage"`
 	BlockWildcardSelect    bool     `yaml:"block_wildcard_select"`
 	BlockUnlimitedGroupBy  bool     `yaml:"block_unlimited_group_by"`
 	BlockExpensiveShows    bool     `yaml:"block_expensive_shows"`

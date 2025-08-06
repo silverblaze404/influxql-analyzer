@@ -2,11 +2,14 @@
 
 # Time-based filtering
 require_time_filter: true
-max_time_range_hours: 840          # 35 days max time range
-
+max_time_range_hours: 840         # 35 days max time range
 
 # Print warning log if query exceeds a warn threshold
 warn_query_duration_hours: 336    # Warn if query takes longer than 14 days
+
+# Regex usage warning
+warn_on_regex_usage: true         # Log warning when queries use regex operators (=~ or !~)
+block_regex_usage: false          # Block queries with regex operators
 
 # Performance filtering
 block_wildcard_select: false       # Block SELECT * without LIMIT
@@ -23,7 +26,7 @@ allowed_measurements:              # If not empty, only allow queries on these m
 
 # Function/statement filtering
 blocked_functions:
-  # - "count(*)"                   # Block count(*) without WHERE clause
+  # - "count(*)"                  # Block count(*) without WHERE clause
 blocked_statements:
   - "DELETE"                      # Block DELETE statements
   # - "DROP"                      # Block DROP statements

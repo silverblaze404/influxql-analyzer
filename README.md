@@ -188,9 +188,10 @@ The application uses a YAML configuration file (`filtering_rules.yaml`) to defin
 
 - Time range requirements and limits
 - Query duration warnings
+- Regex usage control (warn on or block regex operators)
 - Blocked functions and statements
 - Allowed measurements
-- Performance filtering options
+- Performance filtering options (OFFSET limits, wildcard SELECT, unlimited GROUP BY)
 
 ### Default Configuration
 

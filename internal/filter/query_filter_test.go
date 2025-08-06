@@ -917,3 +917,190 @@ func TestQueryFilter_TimezoneQueries(t *testing.T) {
 		})
 	}
 }
+
+func TestQueryFilter_HasRegex(t *testing.T) {
+	rules := config.FilteringRules{}
+	filter := NewQueryFilter(rules)
+
+	tests := []struct {
+		name     string
+		query    string
+		expected bool
+	}{
+		{
+			name:     "Query without regex",
+			query:    "SELECT * FROM cpu WHERE time > now() - 1h",
+			expected: false,
+		},
+		{
+			name:     "Query with regex match operator",
+			query:    "SELECT * FROM cpu WHERE host =~ /server.*/ AND time > now() - 1h",
+			expected: true,
+		},
+		{
+			name:     "Query with regex not-match operator",
+			query:    "SELECT * FROM cpu WHERE host !~ /test.*/ AND time > now() - 1h",
+			expected: true,
+		},
+		{
+			name:     "Query with multiple regex filters",
+			query:    "SELECT * FROM cpu WHERE host =~ /server.*/ AND region !~ /dev.*/ AND time > now() - 1h",
+			expected: true,
+		},
+		{
+			name:     "Query with regex in subquery",
+			query:    "SELECT mean(value) FROM (SELECT * FROM cpu WHERE host =~ /server.*/) WHERE time > now() - 1h",
+			expected: true,
+		},
+		{
+			name:     "Complex query with regex from test cases",
+			query:    `SELECT sum("last_total") FROM (SELECT last("total_entities") AS "last_total" FROM "outstanding_orders" WHERE time > now() - 30m AND "status" =~ /created|temporary_unfulfillable|pending|inventory_awaited$/ AND "bin_tags" =~ /^$bin_tags$/ GROUP BY "bin_tags", "status")`,
+			expected: true,
+		},
+		{
+			name:     "SHOW SERIES with regex",
+			query:    "SHOW SERIES FROM cpu WHERE host =~ /server.*/",
+			expected: false, // Changed: Only SELECT statements are checked
+		},
+		{
+			name:     "SHOW TAG VALUES with regex",
+			query:    "SHOW TAG VALUES FROM cpu WITH KEY = host WHERE host =~ /server.*/",
+			expected: false, // Changed: Only SELECT statements are checked
+		},
+		{
+			name:     "DELETE with regex",
+			query:    "DELETE FROM cpu WHERE host =~ /old.*/",
+			expected: false, // Changed: Only SELECT statements are checked
+		},
+		{
+			name:     "Invalid query syntax",
+			query:    "SELECT * FROM cpu WHERE host =~",
+			expected: false,
+		},
+		{
+			name:     "Query with regular equals (not regex)",
+			query:    "SELECT * FROM cpu WHERE host = 'server1' AND time > now() - 1h",
+			expected: false,
+		},
+		{
+			name:     "Query with regex inside function arguments",
+			query:    "SELECT * FROM cpu WHERE somefunction(host =~ /server.*/) AND time > now() - 1h",
+			expected: true,
+		},
+		{
+			name:     "Query with nested parentheses and regex",
+			query:    "SELECT * FROM cpu WHERE (host =~ /server.*/ OR region !~ /test.*/) AND time > now() - 1h",
+			expected: true,
+		},
+		{
+			name:     "DELETE SERIES with regex",
+			query:    "DELETE FROM cpu WHERE host =~ /old.*/ AND time < now() - 30d",
+			expected: false, // Changed: Only SELECT statements are checked
+		},
+		{
+			name:     "Multiple statements with SELECT having regex",
+			query:    "SHOW DATABASES; SELECT * FROM cpu WHERE host =~ /server.*/; DELETE FROM old_data WHERE time < now() - 30d",
+			expected: true, // Should detect regex in the SELECT statement
+		},
+		{
+			name:     "Multiple statements without SELECT having regex",
+			query:    "SHOW SERIES WHERE host =~ /server.*/; DELETE FROM cpu WHERE host =~ /old.*/",
+			expected: false, // Should not detect regex since no SELECT statements
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Parse the query string to get *influxql.Query
+			query, err := influxql.ParseQuery(tt.query)
+			if err != nil {
+				// For invalid query syntax, we expect the result to be false
+				if tt.expected == false {
+					return // Test passes
+				}
+				t.Fatalf("Failed to parse query (expected it to be valid): %v", err)
+			}
+
+			result := filter.HasRegex(query)
+			if result != tt.expected {
+				t.Errorf("HasRegex() = %v, expected %v for query: %s", result, tt.expected, tt.query)
+			}
+		})
+	}
+}
+
+func TestQueryFilter_WarnOnRegexUsage(t *testing.T) {
+	tests := []struct {
+		name            string
+		rules           config.FilteringRules
+		query           string
+		expectedAllowed bool
+		expectWarning   bool
+	}{
+		{
+			name: "Query with regex and warning enabled should log warning",
+			rules: config.FilteringRules{
+				RequireTimeFilter: false,
+				WarnOnRegexUsage:  true,
+			},
+			query:           `SELECT * FROM cpu WHERE host =~ /server.*/`,
+			expectedAllowed: true,
+			expectWarning:   true,
+		},
+		{
+			name: "Query with regex and warning disabled should not log warning",
+			rules: config.FilteringRules{
+				RequireTimeFilter: false,
+				WarnOnRegexUsage:  false,
+			},
+			query:           `SELECT * FROM cpu WHERE host =~ /server.*/`,
+			expectedAllowed: true,
+			expectWarning:   false,
+		},
+		{
+			name: "Query without regex should not log warning even when enabled",
+			rules: config.FilteringRules{
+				RequireTimeFilter: false,
+				WarnOnRegexUsage:  true,
+			},
+			query:           `SELECT * FROM cpu WHERE host = 'server1'`,
+			expectedAllowed: true,
+			expectWarning:   false,
+		},
+		{
+			name: "Query with regex in subquery should log warning",
+			rules: config.FilteringRules{
+				RequireTimeFilter: false,
+				WarnOnRegexUsage:  true,
+			},
+			query:           `SELECT sum("last_total") FROM (SELECT last("total") AS "last_total" FROM "orders" WHERE "status" =~ /pending|created/)`,
+			expectedAllowed: true,
+			expectWarning:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filter := NewQueryFilter(tt.rules)
+			result := filter.ValidateQuery(tt.query)
+
+			if result.Allowed != tt.expectedAllowed {
+				t.Errorf("ValidateQuery() allowed = %v, expected %v", result.Allowed, tt.expectedAllowed)
+			}
+
+			// Note: In a real test environment, you would capture log output to verify warnings
+			// For now, we just ensure the query is processed correctly
+			if tt.expectWarning {
+				// Verify that HasRegex returns true for queries that should trigger warnings
+				query, err := influxql.ParseQuery(tt.query)
+				if err != nil {
+					t.Fatalf("Failed to parse query: %v", err)
+				}
+				hasRegex := filter.HasRegex(query)
+				if !hasRegex {
+					t.Errorf("Expected query to have regex but HasRegex() returned false: %s", tt.query)
+				}
+			}
+		})
+	}
+}

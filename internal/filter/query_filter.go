@@ -3,6 +3,7 @@ package filter
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -101,6 +102,21 @@ func (qf *QueryFilter) ValidateQuery(queryString string) FilterResult {
 		}
 	}
 
+	hasRegex := qf.HasRegex(query)
+
+	// Log warning if query contains regex and warning is enabled
+	if qf.rules.WarnOnRegexUsage && hasRegex {
+		log.WithField("query", queryString).Warn("Query contains regex operators (=~ or !~)")
+	}
+
+	if qf.rules.BlockRegexUsage && hasRegex {
+		return FilterResult{
+			Allowed: false,
+			Reason:  "Query contains regex operators (=~ or !~) which are not allowed",
+			Query:   queryString,
+		}
+	}
+
 	return FilterResult{
 		Allowed: true,
 		Reason:  "Query passed all filters",
@@ -183,6 +199,65 @@ func (qf *QueryFilter) allMeasurementsAllowed(measurements []string) bool {
 	}
 
 	return true
+}
+
+// HasRegex checks if the query contains regex operators (=~ or !~) in SELECT statements
+func (qf *QueryFilter) HasRegex(query *influxql.Query) bool {
+	for _, stmt := range query.Statements {
+		if selectStmt, ok := stmt.(*influxql.SelectStatement); ok {
+			if qf.hasRegexInStatement(selectStmt) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// hasRegexInStatement checks if a SELECT statement contains regex operators, including in subqueries
+func (qf *QueryFilter) hasRegexInStatement(stmt *influxql.SelectStatement) bool {
+	// Check the main WHERE clause
+	if qf.hasRegexInCondition(stmt.Condition) {
+		return true
+	}
+
+	// Check subqueries in the FROM clause
+	return qf.hasRegexInSources(stmt.Sources)
+}
+
+// hasRegexInSources recursively checks for regex operators in sources, including subqueries
+func (qf *QueryFilter) hasRegexInSources(sources influxql.Sources) bool {
+	for _, source := range sources {
+		switch s := source.(type) {
+		case *influxql.SubQuery:
+			if qf.hasRegexInStatement(s.Statement) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// hasRegexInCondition recursively checks for regex operators in expressions
+func (qf *QueryFilter) hasRegexInCondition(expr influxql.Expr) bool {
+	if expr == nil {
+		return false
+	}
+
+	switch e := expr.(type) {
+	case *influxql.BinaryExpr:
+		// Check if this is a regex operator
+		if e.Op == influxql.EQREGEX || e.Op == influxql.NEQREGEX {
+			return true
+		}
+		// Recursively check both sides
+		return qf.hasRegexInCondition(e.LHS) || qf.hasRegexInCondition(e.RHS)
+	case *influxql.ParenExpr:
+		return qf.hasRegexInCondition(e.Expr)
+	case *influxql.Call:
+		// Check function arguments for regex operators
+		return slices.ContainsFunc(e.Args, qf.hasRegexInCondition)
+	}
+	return false
 }
 
 func (qf *QueryFilter) validateStatement(stmt influxql.Statement, queryString string) FilterResult {
@@ -338,6 +413,9 @@ func (qf *QueryFilter) containsTimeCondition(expr influxql.Expr) bool {
 		return qf.containsTimeCondition(e.LHS) || qf.containsTimeCondition(e.RHS)
 	case *influxql.ParenExpr:
 		return qf.containsTimeCondition(e.Expr)
+	case *influxql.Call:
+		// Check function arguments for time conditions
+		return slices.ContainsFunc(e.Args, qf.containsTimeCondition)
 	}
 	return false
 }
@@ -465,6 +543,11 @@ func (qf *QueryFilter) extractTimeConditions(expr influxql.Expr, start, end *tim
 		qf.extractTimeConditions(e.RHS, start, end)
 	case *influxql.ParenExpr:
 		qf.extractTimeConditions(e.Expr, start, end)
+	case *influxql.Call:
+		// Check function arguments for time conditions
+		for _, arg := range e.Args {
+			qf.extractTimeConditions(arg, start, end)
+		}
 	}
 }
 
