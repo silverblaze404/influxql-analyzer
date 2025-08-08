@@ -40,3 +40,7 @@ filtering_rules.local.yaml
 
 *.log
 *.json
+
+
+# Influxql package
+/influxql
