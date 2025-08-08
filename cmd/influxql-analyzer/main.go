@@ -18,6 +18,8 @@ import (
 
 	"influxql-analyzer/internal/config"
 	"influxql-analyzer/internal/filter"
+
+	"github.com/sirupsen/logrus"
 )
 
 var (
@@ -112,9 +114,40 @@ func printUsage() {
 	fmt.Println()
 	fmt.Println("Note:")
 	fmt.Println("  Maximum time range is configured in the config file via 'max_time_range_hours'")
+	fmt.Println("  Log level and format can be configured in the config file via 'logging.level' and 'logging.format'")
+	fmt.Println("  Supported log levels: trace, debug, info, warn, error, fatal, panic")
+	fmt.Println("  Supported log formats: text, json")
 	fmt.Println()
 	fmt.Println("Example:")
 	fmt.Println("  log-analyzer -log /var/log/influxdb/access.log -output results.json -config my_rules.yaml")
+}
+
+func configureLogger(cfg *config.FilteringRules) {
+	level, err := logrus.ParseLevel(strings.ToLower(cfg.Logging.Level))
+	if err != nil {
+		log.Printf("Warning: Invalid log level '%s', using 'info' instead", cfg.Logging.Level)
+		level = logrus.InfoLevel
+	}
+	logrus.SetLevel(level)
+
+	// Set log format
+	switch strings.ToLower(cfg.Logging.Format) {
+	case "json":
+		logrus.SetFormatter(&logrus.JSONFormatter{
+			TimestampFormat: time.RFC3339,
+		})
+	case "text":
+		logrus.SetFormatter(&logrus.TextFormatter{
+			FullTimestamp:   true,
+			TimestampFormat: time.RFC3339,
+		})
+	default:
+		log.Printf("Warning: Invalid log format '%s', using 'text' instead", cfg.Logging.Format)
+		logrus.SetFormatter(&logrus.TextFormatter{
+			FullTimestamp:   true,
+			TimestampFormat: time.RFC3339,
+		})
+	}
 }
 
 func NewQueryAnalyzer() *QueryAnalyzer {
@@ -129,11 +162,18 @@ func NewQueryAnalyzer() *QueryAnalyzer {
 				MaxTimeRangeHours:      840, // 35 days
 				WarnQueryDurationHours: 336, // 14 days
 				MaxShowSeriesLimit:     10000,
+				Logging: config.LoggingConfig{
+					Level:  "info",
+					Format: "json",
+				},
 			}
 		} else {
 			log.Fatalf("Failed to load configuration: %v", err)
 		}
 	}
+
+	// Configure logger based on configuration
+	configureLogger(cfg)
 
 	return &QueryAnalyzer{
 		queryFilter: filter.NewQueryFilter(*cfg),

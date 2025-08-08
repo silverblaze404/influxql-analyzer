@@ -1,5 +1,10 @@
 ## Query filtering rules configuration
 
+# Logging configuration
+logging:
+  level: "info"                    # Log level: trace, debug, info, warn, error, fatal, panic
+  format: "json"                   # Log format: text, json
+
 # Time-based filtering
 require_time_filter: true
 max_time_range_hours: 840         # 35 days max time range

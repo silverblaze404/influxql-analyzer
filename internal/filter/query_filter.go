@@ -303,7 +303,12 @@ func (qf *QueryFilter) validateSelectStatement(stmt *influxql.SelectStatement, q
 			maxDuration := time.Duration(qf.rules.MaxTimeRangeHours) * time.Hour
 			warnDuration := time.Duration(qf.rules.WarnQueryDurationHours) * time.Hour
 			actualDuration := timeRange.Duration()
-			if actualDuration > warnDuration {
+			log.WithFields(log.Fields{
+				"query":            queryString,
+				"actual_duration":  actualDuration,
+				"allowed_duration": maxDuration,
+			}).Debug("Query time range details")
+			if warnDuration > 0 && actualDuration > warnDuration {
 				log.WithFields(log.Fields{
 					"query":            queryString,
 					"actual_duration":  actualDuration,
