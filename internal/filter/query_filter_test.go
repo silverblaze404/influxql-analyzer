@@ -872,12 +872,12 @@ func TestQueryFilter_TimezoneQueries(t *testing.T) {
 	}{
 		{
 			name:     "Query with timezone function should parse correctly",
-			query:    "select sum(value) as total_item_put from item_put where time >= '2025-07-22T04:00:00.000Z' AND (fulfilment_area='' or fulfilment_area='gtp') AND installation_id='butler_demo' group by time(24h) fill(0) tz('America/New_York')",
+			query:    "select sum(value) as total_item_put from item_put where time >= now() - 7d AND (fulfilment_area='' or fulfilment_area='gtp') AND installation_id='butler_demo' group by time(24h) fill(0) tz('America/New_York')",
 			expected: true,
 		},
 		{
 			name:     "Query with UTC timezone",
-			query:    "select sum(value) from item_put where time >= '2025-07-22T04:00:00.000Z' group by time(1h) tz('UTC')",
+			query:    "select sum(value) from item_put where time >= now() - 7d group by time(1h) tz('UTC')",
 			expected: true,
 		},
 		{
@@ -897,7 +897,7 @@ func TestQueryFilter_TimezoneQueries(t *testing.T) {
 		},
 		{
 			name:     "Query with invalid timezone should fail during parsing",
-			query:    "select sum(value) from item_put where time >= '2025-07-22T04:00:00.000Z' group by time(1h) tz('Invalid/Timezone')",
+			query:    "select sum(value) from item_put where time >= now() - 7d group by time(1h) tz('Invalid/Timezone')",
 			expected: false,
 			reason:   "Invalid query syntax",
 		},
